@@ -3,8 +3,8 @@ WITH
         SELECT 
             PARSE_NUMERIC(scheduled.run_key) as number,
             DATETIME_DIFF(completed.completed_at, completed.created_at, SECOND) as execution_time
-        FROM moz-fx-dev-dschubert-wckb.autowebcompat.hackbot_scheduled scheduled
-        JOIN moz-fx-dev-dschubert-wckb.autowebcompat.hackbot_completed completed USING (run_id)
+        FROM `{{ ref('hackbot_scheduled') }}` scheduled
+        JOIN `{{ ref('hackbot_completed') }}` completed USING (run_id)
         WHERE scheduled.task_name = 'repro'
     )
 SELECT 
@@ -16,7 +16,7 @@ SELECT
         ELSE 'other'
     END AS origin,
     CASE 
-        WHEN scored.webcompat_priority IS NULL THEN FALSE
+        WHEN JSON_VALUE(reports.user_story, '$.impact') IS NULL THEN FALSE
         ELSE TRUE
     END AS triaged,
     scored.impact_score AS impact_score,
@@ -35,8 +35,8 @@ SELECT
         WHEN reports.whiteboard like '%autowebcompat:interv-ua-override-proposed%' THEN TRUE
         ELSE FALSE
     END AS interv_ua_override_proposed
-FROM moz-fx-dev-dschubert-wckb.webcompat_knowledge_base.site_reports reports
-    LEFT JOIN moz-fx-dev-dschubert-wckb.webcompat_knowledge_base.scored_site_reports scored USING (number)
-    LEFT JOIN hackbot_repro USING (number) 
+FROM `{{ ref('webcompat_knowledge_base.site_reports') }}` reports
+    LEFT JOIN `{{ ref('webcompat_knowledge_base.scored_site_reports') }}` scored USING (number)
+    LEFT JOIN hackbot_repro USING (number)
 ORDER BY reports.creation_time DESC;
 
