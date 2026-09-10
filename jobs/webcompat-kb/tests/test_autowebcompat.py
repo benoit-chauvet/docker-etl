@@ -1,11 +1,12 @@
 import base64
-from collections import defaultdict
-from pathlib import Path
 import json
+from collections import defaultdict
+from collections.abc import Iterable, Mapping
 from datetime import datetime
-from typing import Mapping, Optional, Iterable, cast
-from uuid import UUID
+from pathlib import Path
+from typing import Optional, cast
 from unittest.mock import Mock, patch
+from uuid import UUID
 
 import httpx
 from bugdantic import bugzilla
@@ -14,7 +15,6 @@ from pydantic import BaseModel
 from webcompat_kb import hackbot
 from webcompat_kb.etl import autowebcompat
 from webcompat_kb.etl.autowebcompat import Json
-
 
 DATA_PATH = Path(__file__).parent / "data"
 
@@ -81,9 +81,11 @@ class MockHackbot(hackbot.Hackbot):
         raise httpx.HTTPError()
 
     def get_artifact_url(self, run_uuid: UUID, artifact_path: str) -> str:
-        if run_uuid in self.artifact_urls:
-            if artifact_path in self.artifact_urls[run_uuid]:
-                return self.artifact_urls[run_uuid][artifact_path]
+        if (
+            run_uuid in self.artifact_urls
+            and artifact_path in self.artifact_urls[run_uuid]
+        ):
+            return self.artifact_urls[run_uuid][artifact_path]
         # TODO this should really be a HTTPStatusError but we don't have a
         # request or response object
         raise httpx.HTTPError()
@@ -145,7 +147,7 @@ class MockBigQueryService(autowebcompat.BigQueryService):
         return rv
 
     def get_diagnosis_requested_bugs(
-        self,
+        self, whiteboard_token: str
     ) -> Mapping[int, autowebcompat.DiagnosisBugInfo]:
         rv = {}
         for item in self.diagnosis_bugs:
@@ -404,6 +406,7 @@ def test_diagnosis_bugzilla_update() -> None:
     assert attachment.file_name == "autowebcompat-diagnosis-testcase.html"
     assert attachment.content_type == "text/html"
     assert base64.b64decode(attachment.data).decode("utf8") == testcase_source
+    assert "autowebcompat-diagnosis-reason" not in updates.bug.cf_user_story
 
 
 def test_diagnosis_bugzilla_update_testcase_fetch_failed() -> None:
@@ -463,7 +466,7 @@ def test_diagnosis_bugzilla_update_error() -> None:
     assert updates.add_attachments == []
 
 
-def test_diagnosis_schedule_clears_flag() -> None:
+def test_diagnosis_schedule_updates_flag() -> None:
     """Scheduling a run consumes the request token from the whiteboard."""
     hackbot_client = MockHackbot()
     bq_service = MockBigQueryService()
@@ -494,7 +497,10 @@ def test_diagnosis_schedule_clears_flag() -> None:
     task.populate_updates(updater)
 
     updates = updater.bug_updates[1903487][1]
-    assert updates.bug.whiteboard == "[autowebcompat:processed]"
+    assert (
+        updates.bug.whiteboard
+        == "[autowebcompat:processed][autowebcompat:diagnosis-in-progress]"
+    )
     assert updates.has_updates()
 
 

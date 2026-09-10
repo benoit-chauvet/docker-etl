@@ -1,18 +1,19 @@
 import tempfile
 from collections import defaultdict
-from datetime import datetime, timezone
+from collections.abc import Iterable, Mapping
+from datetime import UTC, datetime
+from typing import Any
 from unittest.mock import patch
-from typing import Any, Iterable, Mapping
 
-import pytest
 import bugdantic.bugzilla
+import pytest
 
 from webcompat_kb.etl.bugzilla import (
+    EXTERNAL_LINK_CONFIGS,
     Bug,
     BugHistoryChange,
     BugHistoryEntry,
     BugHistoryUpdater,
-    EXTERNAL_LINK_CONFIGS,
     PropertyHistory,
     add_datetime_limit,
     extract_int_from_field,
@@ -63,6 +64,8 @@ SAMPLE_KB_BUGS = to_bugs_by_id(
         {
             "alias": None,
             "assigned_to": "test@example.org",
+            "attachments": [],
+            "comments": [],
             "blocks": [],
             "component": "Knowledge Base",
             "creation_time": "2000-07-25T13:50:04Z",
@@ -92,7 +95,7 @@ SAMPLE_KB_BUGS = to_bugs_by_id(
             "status": "NEW",
             "summary": "Missing implementation of textinput event",
             "url": "",
-            "user_story": "url:cmcreg.bancosantander.es/*\r\nurl:new.reddit.com/*\r\nurl:web.whatsapp.com/*\r\nurl:facebook.com/*\r\nurl:twitter.com/*\r\nurl:reddit.com/*\r\nurl:mobilevikings.be/*\r\nurl:book.ersthelfer.tv/*",  # noqa
+            "user_story": "url:cmcreg.bancosantander.es/*\r\nurl:new.reddit.com/*\r\nurl:web.whatsapp.com/*\r\nurl:facebook.com/*\r\nurl:twitter.com/*\r\nurl:reddit.com/*\r\nurl:mobilevikings.be/*\r\nurl:book.ersthelfer.tv/*",
             "webcompat_priority": None,
             "webcompat_score": None,
             "whiteboard": "",
@@ -100,6 +103,8 @@ SAMPLE_KB_BUGS = to_bugs_by_id(
         {
             "alias": None,
             "assigned_to": "nobody@mozilla.org",
+            "attachments": [],
+            "comments": [],
             "blocks": [],
             "component": "Knowledge Base",
             "creation_time": "2000-07-25T13:50:04Z",
@@ -128,7 +133,7 @@ SAMPLE_KB_BUGS = to_bugs_by_id(
             "status": "NEW",
             "summary": "Sites breaking due to the lack of WebUSB support",
             "url": "",
-            "user_story": "url:webminidisc.com/*\r\nurl:app.webadb.com/*\r\nurl:www.numworks.com/*\r\nurl:webadb.github.io/*\r\nurl:www.stemplayer.com/*\r\nurl:wootility.io/*\r\nurl:python.microbit.org/*\r\nurl:flash.android.com/*",  # noqa
+            "user_story": "url:webminidisc.com/*\r\nurl:app.webadb.com/*\r\nurl:www.numworks.com/*\r\nurl:webadb.github.io/*\r\nurl:www.stemplayer.com/*\r\nurl:wootility.io/*\r\nurl:python.microbit.org/*\r\nurl:flash.android.com/*",
             "webcompat_priority": None,
             "webcompat_score": None,
             "whiteboard": "",
@@ -136,6 +141,8 @@ SAMPLE_KB_BUGS = to_bugs_by_id(
         {
             "alias": None,
             "assigned_to": "nobody@mozilla.org",
+            "attachments": [],
+            "comments": [],
             "blocks": [222222, 1734557],
             "component": "Knowledge Base",
             "creation_time": "2000-07-25T13:50:04Z",
@@ -174,6 +181,8 @@ SAMPLE_CORE_BUGS = to_bugs_by_id(
         {
             "alias": "core-bug-1",
             "assigned_to": "nobody@mozilla.org",
+            "attachments": [],
+            "comments": [],
             "blocks": [1754236, 1835339],
             "component": "DOM: Events",
             "creation_time": "2000-07-25T13:50:04Z",
@@ -209,6 +218,8 @@ SAMPLE_CORE_BUGS = to_bugs_by_id(
         {
             "assigned_to": "nobody@mozilla.org",
             "alias": None,
+            "attachments": [],
+            "comments": [],
             "blocks": [111111],
             "component": "Test",
             "creation_time": "2000-07-25T13:50:04Z",
@@ -235,6 +246,8 @@ SAMPLE_CORE_BUGS = to_bugs_by_id(
         {
             "alias": None,
             "assigned_to": "nobody@mozilla.org",
+            "attachments": [],
+            "comments": [],
             "blocks": [],
             "component": "Test",
             "creation_time": "2000-07-25T13:50:04Z",
@@ -266,6 +279,8 @@ SAMPLE_BREAKAGE_BUGS = to_bugs_by_id(
         {
             "alias": None,
             "assigned_to": "nobody@mozilla.org",
+            "attachments": [],
+            "comments": [],
             "blocks": [],
             "component": "Site Reports",
             "creation_time": "2000-07-25T13:50:04Z",
@@ -292,6 +307,8 @@ SAMPLE_BREAKAGE_BUGS = to_bugs_by_id(
         {
             "alias": None,
             "assigned_to": "nobody@mozilla.org",
+            "attachments": [],
+            "comments": [],
             "blocks": [],
             "component": "Site Reports",
             "creation_time": "2000-07-25T13:50:04Z",
@@ -323,6 +340,8 @@ SAMPLE_ETP_BUGS = to_bugs_by_id(
         {
             "alias": None,
             "assigned_to": "nobody@mozilla.org",
+            "attachments": [],
+            "comments": [],
             "blocks": [1101005],
             "component": "Privacy: Site Reports",
             "creation_time": "2024-07-30T07:37:28Z",
@@ -349,6 +368,8 @@ SAMPLE_ETP_BUGS = to_bugs_by_id(
         {
             "alias": None,
             "assigned_to": "nobody@mozilla.org",
+            "attachments": [],
+            "comments": [],
             "blocks": [],
             "component": "Privacy: Site Reports",
             "creation_time": "2024-10-01T08:50:58Z",
@@ -379,6 +400,8 @@ SAMPLE_ETP_BUGS = to_bugs_by_id(
         {
             "alias": None,
             "assigned_to": "nobody@mozilla.org",
+            "attachments": [],
+            "comments": [],
             "blocks": [],
             "component": "Privacy: Site Reports",
             "creation_time": "2024-10-30T15:04:41Z",
@@ -410,6 +433,8 @@ SAMPLE_ETP_DEPENDENCIES_BUGS = to_bugs_by_id(
         {
             "alias": None,
             "assigned_to": "nobody@mozilla.org",
+            "attachments": [],
+            "comments": [],
             "blocks": [
                 1526695,
                 1903311,
@@ -474,6 +499,8 @@ SAMPLE_ETP_DEPENDENCIES_BUGS = to_bugs_by_id(
         {
             "alias": None,
             "assigned_to": "nobody@mozilla.org",
+            "attachments": [],
+            "comments": [],
             "blocks": [1101005, 1773684, 1921943],
             "component": "Privacy: Anti-Tracking",
             "creation_time": "2022-10-26T09:33:25Z",
@@ -506,6 +533,8 @@ SAMPLE_ETP_DEPENDENCIES_BUGS = to_bugs_by_id(
         {
             "alias": None,
             "assigned_to": "nobody@mozilla.org",
+            "attachments": [],
+            "comments": [],
             "blocks": [
                 1101005,
                 1901474,
@@ -549,6 +578,8 @@ SAMPLE_ETP_DEPENDENCIES_BUGS = to_bugs_by_id(
         {
             "alias": None,
             "assigned_to": "nobody@mozilla.org",
+            "attachments": [],
+            "comments": [],
             "blocks": [],
             "component": "Privacy: Anti-Tracking",
             "creation_time": "2024-01-17T13:40:16Z",
@@ -580,6 +611,8 @@ SAMPLE_CORE_AS_KB_BUGS = to_bugs_by_id(
         {
             "alias": None,
             "assigned_to": "nobody@mozilla.org",
+            "attachments": [],
+            "comments": [],
             "blocks": [1539848, 1729514, 1896383],
             "component": "JavaScript Engine",
             "creation_time": "2024-03-21T16:40:27Z",
@@ -606,6 +639,8 @@ SAMPLE_CORE_AS_KB_BUGS = to_bugs_by_id(
         {
             "alias": None,
             "assigned_to": "nobody@mozilla.org",
+            "attachments": [],
+            "comments": [],
             "blocks": [1656444, 1835339, 222222],
             "component": "DOM: Window and Location",
             "creation_time": "2024-04-30T14:04:23Z",
@@ -632,6 +667,8 @@ SAMPLE_CORE_AS_KB_BUGS = to_bugs_by_id(
         {
             "alias": None,
             "assigned_to": "nobody@mozilla.org",
+            "attachments": [],
+            "comments": [],
             "blocks": [],
             "component": "JavaScript Engine",
             "creation_time": "2024-03-21T16:40:27Z",
@@ -702,7 +739,7 @@ SAMPLE_HISTORY = to_history(
                     "changes": [
                         {
                             "field_name": "cf_user_story",
-                            "added": "@@ -0,0 +1,3 @@\n+platform:linux\r\n+impact:feature-broken\r\n+affects:some\n\\ No newline at end of file\n",  # noqa
+                            "added": "@@ -0,0 +1,3 @@\n+platform:linux\r\n+impact:feature-broken\r\n+affects:some\n\\ No newline at end of file\n",
                             "removed": "",
                         },
                         {"field_name": "priority", "removed": "--", "added": "P3"},
@@ -786,7 +823,7 @@ MISSING_KEYWORDS_HISTORY = to_history(
                     "when": "2024-05-27T15:10:10Z",
                     "changes": [
                         {
-                            "added": "@@ -1 +1,4 @@\n-\n+platform:windows,mac,linux,android\r\n+impact:blocked\r\n+configuration:general\r\n+affects:all\n",  # noqa
+                            "added": "@@ -1 +1,4 @@\n-\n+platform:windows,mac,linux,android\r\n+impact:blocked\r\n+configuration:general\r\n+affects:all\n",
                             "field_name": "cf_user_story",
                             "removed": "",
                         },
@@ -811,7 +848,7 @@ MISSING_KEYWORDS_HISTORY = to_history(
                     "changes": [
                         {
                             "field_name": "cf_user_story",
-                            "added": "@@ -1 +1,4 @@\n-\n+platform:windows,mac,linux\r\n+impact:site-broken\r\n+configuration:general\r\n+affects:all\n",  # noqa
+                            "added": "@@ -1 +1,4 @@\n-\n+platform:windows,mac,linux\r\n+impact:site-broken\r\n+configuration:general\r\n+affects:all\n",
                             "removed": "",
                         },
                         {"removed": "P3", "added": "P1", "field_name": "priority"},
@@ -949,6 +986,8 @@ MISSING_KEYWORDS_BUGS = to_bugs_by_id(
         {
             "alias": None,
             "assigned_to": "nobody@mozilla.org",
+            "attachments": [],
+            "comments": [],
             "blocks": [],
             "component": "Site Reports",
             "creation_time": "2024-05-23T16:40:29Z",
@@ -975,6 +1014,8 @@ MISSING_KEYWORDS_BUGS = to_bugs_by_id(
         {
             "alias": None,
             "assigned_to": "nobody@mozilla.org",
+            "attachments": [],
+            "comments": [],
             "blocks": [],
             "component": "Site Reports",
             "creation_time": "2024-05-13T13:02:11Z",
@@ -1001,6 +1042,8 @@ MISSING_KEYWORDS_BUGS = to_bugs_by_id(
         {
             "alias": None,
             "assigned_to": "nobody@mozilla.org",
+            "attachments": [],
+            "comments": [],
             "blocks": [],
             "component": "Desktop",
             "creation_time": "2024-05-13T13:02:11Z",
@@ -1032,6 +1075,8 @@ REMOVED_READDED_BUGS = to_bugs_by_id(
         {
             "alias": None,
             "assigned_to": "nobody@mozilla.org",
+            "attachments": [],
+            "comments": [],
             "blocks": [],
             "component": "Desktop",
             "creation_time": "2024-05-13T13:02:11Z",
@@ -1320,7 +1365,7 @@ def test_bugzilla_to_history_entry(history_updater):
                     "changes": [
                         {
                             "field_name": "cf_user_story",
-                            "added": "@@ -0,0 +1,3 @@\n+platform:linux\r\n+impact:feature-broken\r\n+affects:some\n\\ No newline at end of file\n",  # noqa
+                            "added": "@@ -0,0 +1,3 @@\n+platform:linux\r\n+impact:feature-broken\r\n+affects:some\n\\ No newline at end of file\n",
                             "removed": "",
                         }
                     ],
@@ -1421,20 +1466,20 @@ def test_missing_initial_add():
     keyword_map = {
         "added": {
             "webcompat:needs-sitepatch": [
-                datetime(2024, 6, 15, 16, 34, 22, tzinfo=timezone.utc)
+                datetime(2024, 6, 15, 16, 34, 22, tzinfo=UTC)
             ],
             "webcompat:needs-diagnosis": [
-                datetime(2024, 7, 11, 16, 34, 22, tzinfo=timezone.utc),
-                datetime(2024, 12, 11, 16, 34, 22, tzinfo=timezone.utc),
+                datetime(2024, 7, 11, 16, 34, 22, tzinfo=UTC),
+                datetime(2024, 12, 11, 16, 34, 22, tzinfo=UTC),
             ],
         },
         "removed": {
             "webcompat:needs-diagnosis": [
-                datetime(2024, 6, 11, 16, 34, 22, tzinfo=timezone.utc),
-                datetime(2024, 9, 11, 16, 34, 22, tzinfo=timezone.utc),
+                datetime(2024, 6, 11, 16, 34, 22, tzinfo=UTC),
+                datetime(2024, 9, 11, 16, 34, 22, tzinfo=UTC),
             ],
             "webcompat:needs-sitepatch": [
-                datetime(2024, 7, 14, 16, 34, 22, tzinfo=timezone.utc)
+                datetime(2024, 7, 14, 16, 34, 22, tzinfo=UTC)
             ],
         },
     }
@@ -1448,10 +1493,10 @@ def test_missing_initial_add():
     assert property_histories["webcompat:needs-diagnosis"].missing_initial_add()
     assert not property_histories["webcompat:needs-sitepatch"].missing_initial_add()
     removed_first = PropertyHistory()
-    removed_first.add(datetime(2024, 7, 14, 16, 34, 22, tzinfo=timezone.utc), "removed")
+    removed_first.add(datetime(2024, 7, 14, 16, 34, 22, tzinfo=UTC), "removed")
     assert removed_first.missing_initial_add()
     added_first = PropertyHistory()
-    added_first.add(datetime(2024, 7, 14, 16, 34, 22, tzinfo=timezone.utc), "added")
+    added_first.add(datetime(2024, 7, 14, 16, 34, 22, tzinfo=UTC), "added")
     assert not added_first.missing_initial_add()
     empty_history = PropertyHistory()
     assert empty_history.missing_initial_add()
@@ -1464,7 +1509,7 @@ def test_existing_bugs_history(mock_bugzilla_fetch_history, history_updater):
     )
 
     result = history_updater.existing_bugs_history(
-        MISSING_KEYWORDS_BUGS, datetime(2020, 1, 1, tzinfo=timezone.utc)
+        MISSING_KEYWORDS_BUGS, datetime(2020, 1, 1, tzinfo=UTC)
     )
 
     expected = to_history_entry(
@@ -1475,7 +1520,7 @@ def test_existing_bugs_history(mock_bugzilla_fetch_history, history_updater):
                 "change_time": datetime.fromisoformat("2024-05-27T15:10:10Z"),
                 "changes": [
                     {
-                        "added": "@@ -1 +1,4 @@\n-\n+platform:windows,mac,linux,android\r\n+impact:blocked\r\n+configuration:general\r\n+affects:all\n",  # noqa
+                        "added": "@@ -1 +1,4 @@\n-\n+platform:windows,mac,linux,android\r\n+impact:blocked\r\n+configuration:general\r\n+affects:all\n",
                         "field_name": "cf_user_story",
                         "removed": "",
                     },
@@ -1488,7 +1533,7 @@ def test_existing_bugs_history(mock_bugzilla_fetch_history, history_updater):
                 "changes": [
                     {
                         "field_name": "cf_user_story",
-                        "added": "@@ -1 +1,4 @@\n-\n+platform:windows,mac,linux\r\n+impact:site-broken\r\n+configuration:general\r\n+affects:all\n",  # noqa
+                        "added": "@@ -1 +1,4 @@\n-\n+platform:windows,mac,linux\r\n+impact:site-broken\r\n+configuration:general\r\n+affects:all\n",
                         "removed": "",
                     },
                     {
@@ -1549,7 +1594,7 @@ def test_existing_bugs_history_filter_updated(
     )
 
     result = history_updater.existing_bugs_history(
-        MISSING_KEYWORDS_BUGS, datetime(2024, 5, 28, tzinfo=timezone.utc)
+        MISSING_KEYWORDS_BUGS, datetime(2024, 5, 28, tzinfo=UTC)
     )
 
     expected = to_history_entry(
@@ -1664,7 +1709,7 @@ def test_parse_user_story(input, expected):
         ({"cf_webcompat_score": "10"}, {"webcompat_score": 10}),
     ],
 )
-def test_from_bugzilla(input_data, test_fields):
+def test_bug_from_bugzilla_data(input_data, test_fields):
     bug_data = {
         "id": 1,
         "alias": None,
@@ -1680,10 +1725,12 @@ def test_from_bugzilla(input_data, test_fields):
         "severity": "--",
         "creation_time": "2024-03-21T16:40:27Z",
         "assigned_to": "nobody@mozilla.org",
+        "attachments": [],
+        "comments": [],
         "keywords": [],
         "url": "https://example.test",
         "cf_user_story": "",
-        "last_resolved": None,
+        "cf_last_resolved": None,
         "last_change_time": "2024-03-22T16:40:27Z",
         "whiteboard": "",
         "creator": "nobody@mozilla.org",
@@ -1692,8 +1739,7 @@ def test_from_bugzilla(input_data, test_fields):
         "cf_size_estimate": "---",
     }
     bug_data.update(input_data)
-    bugzilla_bug = bugdantic.bugzilla.Bug.model_validate(bug_data)
-    bug = Bug.from_bugzilla(bugzilla_bug)
+    bug = Bug.model_validate(bug_data)
 
     for attr, expected in test_fields.items():
         assert getattr(bug, attr) == expected
@@ -1771,7 +1817,8 @@ def test_read_write_data(project):
 )
 def test_add_datetime_limit(input_query, expected_query):
     assert (
-        add_datetime_limit(input_query, datetime(2025, 5, 10, 0, 30)) == expected_query
+        add_datetime_limit(input_query, datetime(2025, 5, 10, 0, 30, tzinfo=UTC))
+        == expected_query
     )
 
 
@@ -1785,7 +1832,7 @@ def test_add_datetime_limit_error():
                 "o1": "equals",
                 "v1": "Web Compatibility",
             },
-            datetime(2025, 5, 10, 0, 30),
+            datetime(2025, 5, 10, 0, 30, tzinfo=UTC),
         )
 
 
@@ -1801,13 +1848,15 @@ def _bug_defaults():
         "see_also": [],
         "priority": None,
         "severity": None,
-        "creation_time": datetime(2025, 1, 1),
+        "creation_time": datetime(2025, 1, 1, tzinfo=UTC),
         "assigned_to": None,
+        "attachments": [],
+        "comments": [],
         "keywords": [],
         "url": "",
         "user_story": "",
         "last_resolved": None,
-        "last_change_time": datetime(2025, 10, 1),
+        "last_change_time": datetime(2025, 10, 1, tzinfo=UTC),
         "size_estimate": None,
         "whiteboard": "",
         "webcompat_priority": None,
